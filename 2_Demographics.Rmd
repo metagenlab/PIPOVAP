@@ -1,0 +1,278 @@
+# Scriipt for demographic data and production of clinical data tables
+# Creation 20.01.2022 by Antonios Kritikos
+# for PIPOVAP study
+# Output : clinical data tables
+
+
+# Install packages and load libraries
+install.packages("dplyr")
+library(dplyr)
+install.packages("tidyselct")
+library(tidyselect)
+install.packages("tidyr")
+library(tidyr)
+install.packages("dslabs")
+library(dslabs)
+install.packages("lubridate")
+library(lubridate)
+install.packages("readxl")
+library(readxl)
+install.packages("ggplot")
+library(ggplot2)
+install.packages("patchwork")
+library(patchwork)
+install.packages("ggridges")
+library(ggridges)
+install.packages("sqldf")  # package for use of SQL codes with r
+library("sqldf")
+install.packages("xlsx")
+library("xlsx")
+install.packages("reshape2")
+library(reshape2)
+install.packages("plyr")
+library(plyr)
+install.packages("scales")
+library(scales)
+install.packages("ggrepel")
+library(ggrepel)
+install.packages("RColorBrewer")
+library(RColorBrewer)
+install.packages("ggpubr")
+library(ggpubr)
+devtools::install_github("rkabacoff/ggpie")
+library(ggpie)
+library(tidyverse)
+install.packages("gapminder")
+library(gapminder)
+install.packages("table1")
+library(table1)
+install.packages("arsenal")
+library(arsenal)
+install.packages("Gmisc")
+library(Gmisc)
+install.packages("tableone")
+library(tableone)
+install.packages("gtsummary")
+remotes::install_github("ddsjoberg/gtsummary")
+library(gtsummary)
+install.packages("labelled")
+library(labelled)
+install.packages("summarytools")
+library(summarytools)
+install.packages("remotes")
+remotes::install_github("rstudio/gt")
+library(gt)
+install.packages("webshot")
+library(webshot)
+webshot::install_phantomjs()
+
+#Import data
+Clinical_data<-read_excel("//file3.intranet.chuv/data3/SHARE/PIPOVAP/PIPOVAP script _171121_AK/Demographics and Data Filtering/Clinical_data.xlsx", sheet="Demographic and admission Data")
+
+View(Clinical_data)
+
+
+#Create first Table 1 containing demographic data
+
+# Transform categorical variables to factors
+Clinical_data$sex<-as.factor(Clinical_data$sex)
+Clinical_data$ethn<-as.factor(Clinical_data$ethn)
+Clinical_data$smok<-as.factor(Clinical_data$smok)
+Clinical_data$comorb<-as.factor(Clinical_data$comorb)
+Clinical_data$surv_28<-as.factor(Clinical_data$surv_28)
+Clinical_data$surv_90<-as.factor(Clinical_data$surv_90)
+
+
+#Create labels
+table1::label(Clinical_data$sex) <- "Sex"
+table1::label(Clinical_data$Age) <- "Age (years)"
+table1::label(Clinical_data$ethn) <- "Ethnicity"
+table1::label(Clinical_data$BMI) <- "Body Mass Index"
+table1::label(Clinical_data$weight) <- "Weight (kg)"
+table1::label(Clinical_data$smok) <- "Smoker"
+table1::label(Clinical_data$ethn) <- "Ethnicity"
+table1::label(Clinical_data$comorb) <- "Comorbidities"
+table1::label(Clinical_data$days_ICU) <- "Length of ICU stay (days)"
+table1::label(Clinical_data$days_intubation) <- "Length of intubation (days)"
+table1::label(Clinical_data$surv_28) <- "28 days mortality"
+table1::label(Clinical_data$surv_90) <- "90 days mortality"
+
+#Create the table with table1 function
+tab1<-table1::table1(~sex + Age + ethn + weight+ BMI+ smok + ethn+ comorb+ days_ICU+ days_intubation+ surv_28+ surv_90 | Group, data = Clinical_data,render.missing=NULL)
+print(tab1)
+
+#Revalue the names of variables to be lisible
+Clinical_data$sex<-revalue(Clinical_data$sex,c("1"="Men","2"="Women"))
+Clinical_data$ethn<-revalue(Clinical_data$ethn,c("1"="Caucasien","2"="African","3"="Asian","4"="Hispanic"))
+Clinical_data$smok<-revalue(Clinical_data$smok,c("1"="Yes","0"="No"))
+Clinical_data$comorb<-revalue(Clinical_data$comorb,c("1"="Yes","0"="No"))
+Clinical_data$surv_28<-revalue(Clinical_data$surv_28,c("1"="Alive","2"="Dead"))
+Clinical_data$surv_90<-revalue(Clinical_data$surv_90,c("1"="Alive","2"="Dead"))
+
+
+#Customize table, inspired by   https://cran.r-project.org/web/packages/table1/vignettes/table1-examples.html
+units(Clinical_data$Age)   <- "years"   #ad unit of Age
+units(Clinical_data$weight)   <- "Kg" 
+units(Clinical_data$days_ICU)   <- "days" 
+units(Clinical_data$days_intubation)   <- "days" 
+
+tab1<-table1::table1(~sex + Age + ethn + weight+ BMI+ smok + ethn+ comorb+ days_ICU+ days_intubation+ surv_28+ surv_90 | Group, data = Clinical_data,render.missing=NULL)
+print(tab1)
+
+# Choose only median (min, max) values for continuous variables
+tab1<-table1::table1(~sex + Age + ethn + weight+ BMI+ smok + ethn+ comorb+ days_ICU+ days_intubation+ surv_28+ surv_90 | Group, data = Clinical_data,render.missing=NULL,topclass="Rtable1-shade",render.continuous="Median [Min, Max]")
+print(tab1)
+
+
+
+####################################################
+##################################################
+# Create demographics table using "tbl_summary" function
+                             
+trial2 <- Clinical_data %>% select(sex,Age,ethn , weight, BMI, smok , ethn, comorb, days_ICU, days_intubation, surv_28, surv_90,Group )                    
+
+tab1<-trial2%>%tbl_summary(by=Group,missing="no",type=list(c(smok,comorb)~"categorical"))%>% add_p(pvalue_fun = ~style_pvalue(.x, digits = 2))%>% 
+add_overall()%>%
+  modify_header(label ~ "**Variable**")%>% 
+modify_spanning_header(c("stat_1", "stat_2","stat_3") ~ "**Study group**")%>%
+  modify_caption("**Table 1. Patient demographics**") %>%
+  bold_labels()%>%
+italicize_levels%>%
+  bold_p()
+
+tab1
+
+
+tab1 %>%    # build gtsummary table
+  as_gt() %>%             # convert to gt table
+  gt::gtsave(             # save table as image
+    filename = "Table1_demographics.png"
+  )
+
+
+
+######################################################
+# Create Table 2.Clinical characteristics on admission
+
+table1::label(Clinical_data$gcs_adm) <- "Glascow Coma Scale"
+table1::label(Clinical_data$`APACHE II_admission`) <- "APACHE II score"
+table1::label(Clinical_data$temp_admi) <- "Temperature (°C)"
+table1::label(Clinical_data$fc) <- "Cardiac frequency (bpm)"
+table1::label(Clinical_data$tas) <- "Systolic blood pressure (mm Hg)"
+table1::label(Clinical_data$tad) <- "Diastolic blood pressure (mm Hg)"
+table1::label(Clinical_data$amin_adm) <- "Aminergic support"
+table1::label(Clinical_data$freq_resp_adm) <- "Respiratory frequency (per minute)"
+table1::label(Clinical_data$fio2_adm) <- "FiO2"
+table1::label(Clinical_data$po2_adm) <- "Partial O2 pressure (mm Hg)"
+table1::label(Clinical_data$peep_adm) <- "Positive end expiratory pressure (cm H2O)"
+table1::label(Clinical_data$crp_adm) <- "C-reactive protein (mg/L)"
+table1::label(Clinical_data$pct_adm) <- "Procalcitonin (mcg/L)"
+table1::label(Clinical_data$creat_adm) <- "Creatinine (mcmol/L)"
+table1::label(Clinical_data$leuco_adm) <- "White blood cells (G/L)"
+table1::label(Clinical_data$lact_adm) <- "Lactic acid (mmol/L))"
+
+#Revalue the names of variables to be lisible
+class(Clinical_data$amin_adm)
+Clinical_data$amin_adm<-as.factor(Clinical_data$amin_adm)
+
+Clinical_data$amin_adm<-revalue(Clinical_data$amin_adm,c("1"="Yes","0"="No"))
+
+
+table2 <- Clinical_data %>% select(`APACHE II_admission`,gcs_adm,temp_admi,fc,tas,tad,amin_adm,freq_resp_adm,fio2_adm,po2_adm,peep_adm,crp_adm,pct_adm,lact_adm,creat_adm,leuco_adm,Group )                    
+View(table2)
+
+tab2<-table2%>%tbl_summary(by=Group,missing="no",type=list(c(gcs_adm,peep_adm,pct_adm)~ "continuous",amin_adm~"categorical"))%>% add_p(pvalue_fun = ~style_pvalue(.x, digits = 2))%>% 
+  add_overall()%>%
+  modify_header(label ~ "**Variable**")%>% 
+  modify_spanning_header(c("stat_1", "stat_2","stat_3") ~ "**Study group**")%>%
+  modify_caption("**Table 2. Clinical characteristics on ICU admission**") %>%
+  bold_labels()%>%
+  italicize_levels%>%
+  bold_p()
+
+tab2
+
+tab2 %>%    # build gtsummary table
+  as_gt() %>%             # convert to gt table
+  gt::gtsave(             # save table as image
+    filename = "Table2_clinical_characteristics.png"
+  )
+
+
+
+#Import onc again "Clinical_data" file but this time the 2nd sheet containing infection and microbiology data
+Clinical_data2<-read_excel("//file3.intranet.chuv/data3/SHARE/PIPOVAP/PIPOVAP script _171121_AK/Demographics and Data Filtering/Clinical_data.xlsx", sheet="Infection and Microbiology data")
+
+View(Clinical_data2)
+
+# Filter only for infected patients
+Clinical_data2<-filter(Clinical_data2,Clinical_data2$Group=="Pneumonia"|Clinical_data2$Group=="OtherInfection")
+
+View(Clinical_data2)
+
+
+# Create Table 3 with the Characteristics of infectious episodes
+
+names(Clinical_data2)
+
+table3 <- Clinical_data2 %>% select(Tot_number_infect_event,infect_event_1_fio2_ep,infect_event_1_peep_ep,
+                                    infect_event_1_temp_ep,infect_event_1_fc_ep,infect_event_1_tas_ep,infect_event_1_tad_ep,infect_event_1_amin_ep,
+                                    infect_event_1_crp_ep,infect_event_1_pct_ep,infect_event_1_lact_ep,infect_event_1_leuco_ep,Tot_number_ant,length_atb,infect_event_1_anti_1_atb,Group )                    
+
+
+table1::label(table3$Tot_number_infect_event) <- "Number of infectious episodes"
+table1::label(table3$infect_event_1_fio2_ep) <- "FiO2 "
+table1::label(table3$infect_event_1_peep_ep) <- "Positive end expiratory pressure (cm H2O)"
+table1::label(table3$infect_event_1_temp_ep) <- "Temperature (°C)"
+table1::label(table3$infect_event_1_fc_ep) <- "Cardiac frequency (bpm)"
+table1::label(table3$infect_event_1_tas_ep) <- "Systolic blood pressure (mm Hg)"
+table1::label(table3$infect_event_1_tad_ep) <- "Diastolic blood pressure (mm Hg)"
+table1::label(table3$infect_event_1_amin_ep) <- "Aminergic support"
+table1::label(table3$infect_event_1_crp_ep) <- "C-reactive protein (mg/L)"
+table1::label(table3$infect_event_1_pct_ep) <- "Procalcitonin (mcg/L)"
+table1::label(table3$infect_event_1_lact_ep) <- "Lactic acid (mmol/L)"
+table1::label(table3$infect_event_1_leuco_ep) <- "White blood cells (G/L)"
+table1::label(table3$Tot_number_ant) <- "Total number of received antibiotics"
+table1::label(table3$length_atb) <- "Duration of antibiotic treatment (days)"
+table1::label(table3$infect_event_1_anti_1_atb) <- "First antibiotic received"
+
+
+#Revalue the names of variables to be lisible
+class(table3$infect_event_1_amin_ep)
+table3$infect_event_1_amin_ep<-as.factor(table3$infect_event_1_amin_ep)
+
+class(table3$infect_event_1_anti_1_atb)
+table3$infect_event_1_anti_1_atb<-as.factor(table3$infect_event_1_anti_1_atb)
+
+class(table3$Tot_number_ant)
+table3$Tot_number_ant<-as.factor(table3$Tot_number_ant)
+
+class(table3$infect_event_1_lact_ep)
+table3$infect_event_1_lact_ep<-as.numeric(table3$infect_event_1_lact_ep)
+
+table3$infect_event_1_amin_ep<-revalue(table3$infect_event_1_amin_ep,c("1"="Yes","0"="No"))
+table3$Tot_number_ant<-revalue(table3$Tot_number_ant,c("7"=">4"))
+table3$infect_event_1_anti_1_atb<-revalue(table3$infect_event_1_anti_1_atb,c("1"="amoxicillin","2"="amoxicillin/clavulanate","3"="ceftriaxone","11"="piperacilline/tazobactam"))
+
+
+
+type=list(c(infect_event_1_peep_ep,infect_event_1_lact_ep)~ "continuous",c(Tot_number_infect_event,infect_event_1_amin_ep)~"categorical"
+
+
+          
+tab3<-table3%>%tbl_summary(by=Group,missing="no",type=list(c(infect_event_1_peep_ep,infect_event_1_lact_ep)~ "continuous",c(Tot_number_infect_event,infect_event_1_amin_ep)~"categorical"))%>% add_p(pvalue_fun = ~style_pvalue(.x, digits = 2))%>% 
+  modify_header(label ~ "**Variable**")%>% 
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Type of infection**")%>%
+  modify_caption("**Table 3. Characteristics of infectious episodes**") %>%
+  bold_labels()%>%
+  italicize_levels%>%
+  bold_p()
+
+tab3
+
+tab3 %>%    # build gtsummary table
+  as_gt() %>%             # convert to gt table
+  gt::gtsave(             # save table as image
+    filename = "Table3_Characteristics of infectious episodes.png"
+  )
+
